@@ -144,6 +144,7 @@ jobs:
       with:
         token: ${{ secrets.JRNL_BOT_TOKEN }}
         repository: ${{ env.FORMULA_REPO }}
+        fetch-depth: 0
 
     - name: Config git user
       run: |
