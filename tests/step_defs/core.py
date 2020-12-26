@@ -10,9 +10,10 @@ import shlex
 import time
 from unittest.mock import patch
 
-from behave import given
-from behave import then
-from behave import when
+from pytest_bdd import given
+from pytest_bdd import then
+from pytest_bdd import when
+from pytest_bdd import parsers.parse
 import keyring
 import toml
 import yaml
@@ -126,8 +127,8 @@ def read_value_from_string(string):
     return value
 
 
-@given('we use the config "{config_file}"')
-def set_config(context, config_file):
+@given(parse('we use the config "{config_file}"'))
+def set_config(config_file):
     full_path = os.path.join("features/configs", config_file)
 
     install.CONFIG_FILE_PATH = os.path.abspath(full_path)
@@ -137,28 +138,28 @@ def set_config(context, config_file):
             cf.write("version: {}".format(__version__))
 
 
-@given('we use the password "{password}" if prompted')
-def use_password_forever(context, password):
-    context.password = password
+@given(parse('we use the password "{pwd}" if prompted'), target_fixture="password")
+def use_password_forever(pwd):
+    return pwd
 
 
-@given('we use the password "{password}" {num:d} times if prompted')
-def use_password(context, password, num=1):
-    context.password = iter([password] * num)
+@given('we use the password "{pwd}" {num:d} times if prompted')
+def use_password(pwd, num=1, password):
+    password = iter([pwd] * num)
 
 
 @given("we have a keyring")
-def set_keyring(context):
+def set_keyring():
     keyring.set_keyring(TestKeyring())
 
 
 @given("we do not have a keyring")
-def disable_keyring(context):
+def disable_keyring():
     keyring.core.set_keyring(NoKeyring())
 
 
 @when('we change directory to "{path}"')
-def move_up_dir(context, path):
+def move_up_dir(path):
     os.chdir(path)
 
 
@@ -166,8 +167,8 @@ def move_up_dir(context, path):
 @when('we open the editor and {method} "{text}"')
 @when("we open the editor and {method} nothing")
 @when("we open the editor and {method} nothing")
-def open_editor_and_enter(context, method, text=""):
-    text = text or context.text or ""
+def open_editor_and_enter(method, text="", editor_command, password, editor, getpass):
+    text = text or ""
 
     if method == "enter":
         file_method = "w+"
@@ -177,17 +178,14 @@ def open_editor_and_enter(context, method, text=""):
         file_method = "r+"
 
     def _mock_editor(command):
-        context.editor_command = command
+        editor_command = command
         tmpfile = command[-1]
         with open(tmpfile, file_method) as f:
             f.write(text)
 
         return tmpfile
 
-    if "password" in context:
-        password = context.password
-    else:
-        password = ""
+    password = password
 
     # fmt: off
     # see: https://github.com/psf/black/issues/664
@@ -196,37 +194,37 @@ def open_editor_and_enter(context, method, text=""):
         patch("getpass.getpass", side_effect=_mock_getpass(password)) as mock_getpass, \
         patch("sys.stdin.isatty", return_value=True) \
     :
-        context.editor = mock_editor
-        context.getpass = mock_getpass
+        editor = mock_editor
+        getpass = mock_getpass
         cli(["--edit"])
     # fmt: on
 
 
 @then("the editor should have been called")
 @then("the editor should have been called with {num} arguments")
-def count_editor_args(context, num=None):
-    assert context.editor.called
+def count_editor_args(num=None, editor, editor_command):
+    assert editor.called
 
     if isinstance(num, int):
-        assert len(context.editor_command) == int(num)
+        assert len(editor_command) == int(num)
 
 
 @then("the editor should not have been called")
-def no_editor_called(context, num=None):
-    assert "editor" not in context or not context.editor.called
+def no_editor_called(num=None, editor):
+    assert editor is None or not editor.called
 
 
 @then('one editor argument should be "{arg}"')
-def contains_editor_arg(context, arg):
-    args = context.editor_command
+def contains_editor_arg(arg, editor_command):
+    args = editor_command
     assert (
         arg in args and args.count(arg) == 1
     ), f"\narg not in args exactly 1 time:\n{arg}\n{str(args)}"
 
 
 @then('one editor argument should match "{regex}"')
-def matches_editor_arg(context, regex):
-    args = context.editor_command
+def matches_editor_arg(regex, editor_command):
+    args = editor_command
     matches = list(filter(lambda x: re.search(regex, x), args))
     assert (
         len(matches) == 1
@@ -236,8 +234,8 @@ def matches_editor_arg(context, regex):
 @then("the editor file content should {method}")
 @then("the editor file content should {method} empty")
 @then('the editor file content should {method} "{text}"')
-def contains_editor_file(context, method, text=""):
-    text = text or context.text or ""
+def contains_editor_file(method, text=""):
+    text = text or ""
     content = context.editor_file.get("content")
     format = f'\n"""\n{content}\n"""\n'
     if method == "be":

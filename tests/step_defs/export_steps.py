@@ -8,8 +8,8 @@ import random
 import string
 from xml.etree import ElementTree
 
-from behave import given
-from behave import then
+from pytest_bdd import given
+from pytest_bdd import then
 
 
 @then("the output should be parsable as json")
